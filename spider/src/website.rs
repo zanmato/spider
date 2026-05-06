@@ -209,6 +209,10 @@ macro_rules! chrome_page_fetch {
                     });
                     tokio::time::sleep(status_delay.max(backoff)).await;
 
+                    // Close the old chrome_page before creating a retry tab.
+                    #[cfg(feature = "chrome_store_page")]
+                    page.close_chrome_page().await;
+
                     // Fresh tab for retry — avoids reusing a corrupted tab.
                     if let Ok(retry_tab) = crate::features::chrome::attempt_navigation(
                         "about:blank",
@@ -284,8 +288,9 @@ macro_rules! chrome_page_fetch {
                             page.profile_key = Some(pk.clone());
                         }
 
-                        // Retry tab no longer needed — close explicitly.
+                        // Retry tab no longer needed.
                         _retry_guard.defuse();
+                        #[cfg(not(feature = "chrome_store_page"))]
                         let _ = retry_tab.close().await;
                     } else {
                         log::warn!(
@@ -306,8 +311,9 @@ macro_rules! chrome_page_fetch {
                     }
                 }
 
-                // Initial tab no longer needed — close explicitly.
+                // Initial tab no longer needed.
                 _tab_guard.defuse();
+                #[cfg(not(feature = "chrome_store_page"))]
                 let _ = hedge_tab.close().await;
 
                 Some((page, links, links_pages, extract_succeeded))
@@ -414,8 +420,9 @@ macro_rules! chrome_page_fetch_on {
                     }
                 }
 
-                // Tab no longer needed — close explicitly.
+                // Tab no longer needed.
                 _tab_guard.defuse();
+                #[cfg(not(feature = "chrome_store_page"))]
                 let _ = hedge_tab.close().await;
 
                 Some((page, links, links_pages, extract_succeeded))
@@ -8114,6 +8121,10 @@ impl Website {
                                                                     .unwrap_or_else(|| crate::utils::backoff::backoff_delay(attempt - 1, 200, 15_000));
                                                                 tokio::time::sleep(status_delay.max(backoff)).await;
 
+                                                                // Close the old chrome_page before creating a retry tab.
+                                                                #[cfg(feature = "chrome_store_page")]
+                                                                page.close_chrome_page().await;
+
                                                                 // Create a fresh tab for the retry to avoid reusing a
                                                                 // potentially corrupted tab (stale CDP session, bloated
                                                                 // memory, stuck navigation).
@@ -8170,6 +8181,7 @@ impl Website {
 
                                                                     // Retry tab no longer needed.
                                                                     _retry_guard.defuse();
+                                                                    #[cfg(not(feature = "chrome_store_page"))]
                                                                     let _ = retry_page.close().await;
                                                                 } else {
                                                                     log::warn!("{target_url} chrome retry tab creation failed, attempt {attempt}");
@@ -8184,8 +8196,9 @@ impl Website {
                                                                 }
                                                             }
 
-                                                            // Tab no longer needed — close explicitly.
+                                                            // Tab no longer needed.
                                                             _tab_guard.defuse();
+                                                            #[cfg(not(feature = "chrome_store_page"))]
                                                             let _ = new_page.close().await;
 
                                                             // ── Parallel backends: binary content-type early-out (Chrome non-hedge) ──
@@ -9269,6 +9282,10 @@ impl Website {
                                                                         .unwrap_or_else(|| crate::utils::backoff::backoff_delay(attempt - 1, 200, 15_000));
                                                                     tokio::time::sleep(status_delay.max(backoff)).await;
 
+                                                                    // Close the old chrome_page before creating a retry tab.
+                                                                    #[cfg(feature = "chrome_store_page")]
+                                                                    page.close_chrome_page().await;
+
                                                                     if let Ok(retry_page) = attempt_navigation("about:blank", &shared.5, &shared.6.request_timeout, &shared.8, &shared.6.viewport).await {
                                                                         let _retry_guard = crate::features::chrome::TabCloseGuard::new(retry_page.clone());
 
@@ -9320,6 +9337,7 @@ impl Website {
                                                                         }
 
                                                                         _retry_guard.defuse();
+                                                                        #[cfg(not(feature = "chrome_store_page"))]
                                                                         let _ = retry_page.close().await;
                                                                     } else {
                                                                         log::warn!("{target_url} chrome retry tab creation failed, attempt {attempt}");
@@ -9335,6 +9353,7 @@ impl Website {
                                                                 }
 
                                                                 _tab_guard.defuse();
+                                                                #[cfg(not(feature = "chrome_store_page"))]
                                                                 let _ = new_page.close().await;
 
                                                                 chrome_page_post_process!(page, links, links_pages, extract_succeeded, shared, add_external, full_resources, return_page_links, on_should_crawl_callback, permit)
@@ -10857,6 +10876,7 @@ impl Website {
                                                                 }
 
                                                                 _tab_guard.defuse();
+                                                                #[cfg(not(feature = "chrome_store_page"))]
                                                                 let _ = new_page.close().await;
 
                                                                 if page.page_links.is_none() {
@@ -11005,6 +11025,7 @@ impl Website {
                                                         }
 
                                                         _tab_guard.defuse();
+                                                        #[cfg(not(feature = "chrome_store_page"))]
                                                         let _ = new_page.close().await;
 
                                                         if page.page_links.is_none() {

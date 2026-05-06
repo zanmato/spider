@@ -908,6 +908,9 @@ pub struct Page {
     #[cfg(feature = "time")]
     /// The duration from start of parsing to end of gathering links.
     duration: Option<Instant>,
+    #[cfg(feature = "time")]
+    /// The concrete response duration captured at finalization time.
+    response_duration: Option<std::time::Duration>,
     #[cfg(feature = "chrome")]
     /// Page object for chrome. The page may be closed when accessing it on another thread from concurrency.
     chrome_page: Option<chromiumoxide::Page>,
@@ -1060,6 +1063,9 @@ pub struct Page {
     #[cfg(feature = "time")]
     /// The duration from start of parsing to end of gathering links.
     duration: Option<Instant>,
+    #[cfg(feature = "time")]
+    /// The concrete response duration captured at finalization time.
+    response_duration: Option<std::time::Duration>,
     #[cfg(feature = "chrome")]
     /// The screenshot bytes of the page.
     pub screenshot_bytes: Option<Vec<u8>>,
@@ -2042,6 +2048,8 @@ pub fn build(url: &str, mut res: PageResponse) -> Page {
             url: url.into(),
             #[cfg(feature = "time")]
             duration: res.duration,
+            #[cfg(feature = "time")]
+            response_duration: res.response_duration,
             status_code: res.status_code,
             error_status: get_error_status(&mut should_retry, res.error_for_status),
             final_redirect_destination: if empty_page { None } else { res.final_url },
@@ -2148,6 +2156,8 @@ pub fn build(url: &str, mut res: PageResponse) -> Page {
         url: url.into(),
         #[cfg(feature = "time")]
         duration: res.duration,
+        #[cfg(feature = "time")]
+        response_duration: res.response_duration,
         status_code: res.status_code,
         error_status: get_error_status(&mut should_retry, res.error_for_status),
         final_redirect_destination: if empty_page { None } else { res.final_url },
@@ -4375,6 +4385,15 @@ impl Page {
         }
     }
 
+    #[cfg(all(not(feature = "decentralized"), feature = "chrome_store_page"))]
+    /// Take ownership of the stored chrome page, closing it and clearing the field.
+    /// Used internally during retry handling to release the old tab before creating a new one.
+    pub async fn close_chrome_page(&mut self) {
+        if let Some(page) = self.chrome_page.take() {
+            let _ = page.close().await;
+        }
+    }
+
     #[cfg(all(feature = "decentralized", feature = "chrome"))]
     /// Close the chrome page used. Useful when storing the page for subscription usage. The feature flag `chrome_store_page` is required.
     pub async fn close_page(&mut self) {}
@@ -5250,6 +5269,12 @@ impl Page {
             .as_ref()
             .map(|t| t.elapsed())
             .unwrap_or_default()
+    }
+
+    /// Get the concrete response duration captured at finalization time.
+    #[cfg(all(feature = "time", not(feature = "decentralized")))]
+    pub fn get_response_duration(&self) -> Option<Duration> {
+        self.response_duration
     }
 
     /// Set the elapsed duration of the page since scraped from duration.

@@ -656,6 +656,9 @@ pub struct PageResponse {
     /// The duration of the request.
     #[cfg(feature = "time")]
     pub duration: Option<tokio::time::Instant>,
+    /// The concrete elapsed duration captured at response finalization.
+    #[cfg(feature = "time")]
+    pub response_duration: Option<std::time::Duration>,
     /// URLs to spawn as new pages from OpenPage actions.
     /// These are URLs the automation agent requested to open in new tabs.
     /// The caller (website.rs) should create new pages for these using the browser.
@@ -5640,6 +5643,7 @@ pub(crate) fn set_page_response_duration(
     page_response: &mut PageResponse,
     duration: Option<tokio::time::Instant>,
 ) {
+    page_response.response_duration = duration.map(|d| d.elapsed());
     page_response.duration = duration;
 }
 
