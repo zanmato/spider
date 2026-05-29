@@ -8328,6 +8328,11 @@ impl Website {
     #[cfg(all(not(feature = "decentralized"), feature = "chrome"))]
     #[cfg_attr(feature = "tracing", tracing::instrument(skip_all))]
     async fn crawl_concurrent(&mut self, client: &Client, handle: &Option<Arc<AtomicI8>>) {
+        if self.configuration.disable_chrome {
+            self.crawl_concurrent_raw(client, handle).await;
+            return;
+        }
+
         use crate::features::chrome::attempt_navigation;
         self.start();
 
@@ -12008,7 +12013,11 @@ impl Website {
         scrape: bool,
     ) {
         if !self.configuration.ignore_sitemap {
-            self.sitemap_crawl_chrome(client, handle, scrape).await
+            if self.configuration.disable_chrome {
+                self.sitemap_crawl_raw(client, handle, scrape).await
+            } else {
+                self.sitemap_crawl_chrome(client, handle, scrape).await
+            }
         }
     }
 
@@ -12749,6 +12758,14 @@ impl Website {
             }
             _ => self.on_should_crawl_callback = None,
         };
+        self
+    }
+
+    /// Disable Chrome rendering and force plain-HTTP crawling even when the
+    /// `chrome` feature is compiled in.
+    #[cfg(feature = "chrome")]
+    pub fn with_disable_chrome(&mut self, disable: bool) -> &mut Self {
+        self.configuration.disable_chrome = disable;
         self
     }
 

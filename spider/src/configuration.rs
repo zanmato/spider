@@ -698,6 +698,11 @@ pub struct Configuration {
     /// (or its default), preserving pre-2.51.x behavior. When `Some`,
     /// overrides the global pool for this `Website` only.
     pub scraper_worker_connection_urls: Option<Vec<String>>,
+    /// When `true` and the `chrome` feature is compiled in, skip browser
+    /// launch and use the plain-HTTP crawl path instead. This lets
+    /// consumers opt out of JavaScript rendering without removing the
+    /// `chrome` feature from their build.
+    pub disable_chrome: bool,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
