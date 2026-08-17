@@ -5671,12 +5671,20 @@ pub async fn fetch_page_html_chrome_base<'h>(
         }
     }
 
-    if cfg!(not(feature = "chrome_store_page")) {
-        let _ = page
-            .send_command(chromiumoxide::cdp::browser_protocol::page::CloseParams::default())
-            .await;
+    // Closing the tab is what `chrome_store_page` opts out of, so only the
+    // close is conditional. The collected CDP events are the sole source of
+    // the document's *own* response — `chrome_http_req_res` carries the last
+    // request the frame finished, which on any page that loads a subresource
+    // is that subresource — so collecting them is not something a caller who
+    // keeps the page should have to give up.
+    {
+        if cfg!(not(feature = "chrome_store_page")) {
+            let _ = page
+                .send_command(chromiumoxide::cdp::browser_protocol::page::CloseParams::default())
+                .await;
+        }
 
-        // Signal CDP event listeners to exit now that the page is closed,
+        // Signal CDP event listeners to exit now that the navigation is done,
         // then give a brief grace period for final metric flush.
         let _ = shutdown_tx.send(true);
 
@@ -5689,7 +5697,16 @@ pub async fn fetch_page_html_chrome_base<'h>(
         };
 
         if let Ok(Ok((mut transferred, bytes_map, mut rs, request_map))) = collected {
-            let response_map = rs.response_map;
+            // The first non-redirect `Document` response is this page's own,
+            // whether or not the caller asked for response tracking, so its
+            // headers are applied ahead of (and independently of) the response
+            // map. Without this a page is described by whichever subresource
+            // its frame happened to finish last: an `x-robots-tag` from an API
+            // call, a `content-type` of `image/png` on an HTML document.
+            set_page_response_headers_raw(&mut rs.headers, &mut page_response);
+            store_headers(&page_response, &mut chrome_http_req_res);
+
+            let response_map = rs.response_map.take();
 
             if response_map.is_some() {
                 // Cap to bound pre-allocation against pages with excessive subresources.
@@ -5733,9 +5750,6 @@ pub async fn fetch_page_html_chrome_base<'h>(
                 {
                     page_response.status_code = status;
                 }
-
-                set_page_response_headers_raw(&mut rs.headers, &mut page_response);
-                store_headers(&page_response, &mut chrome_http_req_res);
 
                 if anti_bot_tech == AntiBotTech::None {
                     let final_url = match &page_response.final_url {
