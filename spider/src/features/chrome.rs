@@ -1479,6 +1479,10 @@ pub(crate) async fn attempt_navigation(
     cdp_params.browser_context_id.clone_from(browser_context_id);
     cdp_params.for_tab = Some(false);
 
+    if viewport.as_ref().is_some_and(|vp| vp.own_window) {
+        cdp_params.new_window = Some(true);
+    }
+
     if viewport.is_some() {
         browser
             .config()

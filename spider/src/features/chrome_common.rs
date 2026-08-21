@@ -172,6 +172,12 @@ pub struct Viewport {
     pub is_landscape: bool,
     /// Touch screen device?
     pub has_touch: bool,
+    /// Open every page in a window of its own rather than as a background tab.
+    /// A background tab's document is `hidden`, and Chrome never reports
+    /// largest-contentful-paint (and throttles timers) for a page that was
+    /// never visible, so web-vital measurements need this.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub own_window: bool,
 }
 
 impl Default for Viewport {
@@ -183,6 +189,7 @@ impl Default for Viewport {
             emulating_mobile: false,
             is_landscape: false,
             has_touch: false,
+            own_window: false,
         }
     }
 }
