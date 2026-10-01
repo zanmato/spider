@@ -4123,8 +4123,16 @@ pub async fn fetch_page_html_chrome_base<'h>(
     // Listen for network events to track data transfer.
     // Spawning is always required here to collect network metrics in real-time.
     let first_byte_signal_for_spawn = first_byte_signal.clone();
+    // The status of the first non-redirect `Document` response, 0 until it
+    // arrives. The navigation's own result can't be trusted for it: chromey
+    // keeps whichever request the frame finished last, so a page with a
+    // broken image or an unresolvable script reports that resource's 404 or
+    // DNS failure as its own status.
+    let document_status = std::sync::Arc::new(std::sync::atomic::AtomicU16::new(0));
+    let document_status_for_spawn = document_status.clone();
     let bytes_collected_handle = tokio::spawn(async move {
         let first_byte_signal = first_byte_signal_for_spawn;
+        let document_status = document_status_for_spawn;
         let finished_media: Option<OnceCell<RequestId>> =
             if asset { Some(OnceCell::new()) } else { None };
 
@@ -4260,6 +4268,9 @@ pub async fn fetch_page_html_chrome_base<'h>(
                         if !redirect {
                             intial_request = true;
                             status_code = Some(event.response.status);
+                            if let Ok(status) = u16::try_from(event.response.status) {
+                                document_status.store(status, std::sync::atomic::Ordering::Release);
+                            }
                             headers = Some(event.response.headers.clone());
                             #[cfg(feature = "remote_addr")]
                             {
@@ -4607,6 +4618,14 @@ pub async fn fetch_page_html_chrome_base<'h>(
             request_cancelled = true;
         }
     };
+
+    // Correct the status before anything branches on it, so a page whose
+    // subresource failed still gets its events run and its content kept.
+    if let Ok(status) =
+        StatusCode::from_u16(document_status.load(std::sync::atomic::Ordering::Acquire))
+    {
+        chrome_http_req_res.status_code = status;
+    }
 
     base_timeout = sub_duration(base_timeout_measurement, start_time.elapsed());
 
